@@ -1,0 +1,29 @@
+(() => {
+  'use strict';
+  const cfg=window.MODEL_ANALYTICS||{};
+  const storage={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
+  const menu=document.getElementById('menu-toggle');
+  menu?.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));document.getElementById('nav').classList.toggle('open',open)});
+  document.querySelectorAll('[data-filter]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-filter]').forEach(b=>{const active=b===btn;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});let visible=0;document.querySelectorAll('[data-kind]').forEach(card=>{card.hidden=btn.dataset.filter!=='all'&&card.dataset.kind!==btn.dataset.filter;if(!card.hidden)visible++});document.getElementById('filter-status').textContent='Показано упражнений: '+visible}));
+  let statsStarted=false;
+  function event(name){document.dispatchEvent(new CustomEvent('modelnotes:goal',{detail:{name}}));if(!statsStarted)return;const goals={checklist_download:'checklistDownload',checklist_complete:'checklistComplete'};const goal=goals[name]||name;if(cfg.myTrackerId&&window._tmr)window._tmr.push({id:cfg.myTrackerId,type:'reachGoal',goal:goal});const send=()=>{if(window.top100Counter&&typeof window.top100Counter.trackEvent==='function')window.top100Counter.trackEvent(goal,{section:'checklist'});};if(cfg.ramblerId){if(window.top100Counter)send();else(window._top100q=window._top100q||[]).push(send);}}
+  const checks=[...document.querySelectorAll('[data-check]')];
+  let saved={};try{saved=JSON.parse(storage.get('modelnotes-checks')||'{}')}catch{}
+  let completedThisVisit=false;
+  function update(fromInteraction=false){const values={};checks.forEach(c=>values[c.dataset.check]=c.checked);storage.set('modelnotes-checks',JSON.stringify(values));const n=checks.filter(c=>c.checked).length;const count=document.getElementById('done-count');if(!count)return;count.textContent=String(n);document.getElementById('progress').value=n;document.getElementById('check-status').textContent=n===8?'Всё готово. Удачной съёмки!':n===0?'Начни с самого простого пункта.':`Готово ${n} из 8. Продолжай в своём темпе.`;if(n===8&&fromInteraction&&!completedThisVisit){event('checklist_complete');completedThisVisit=true}}
+  checks.forEach(c=>{c.checked=Boolean(saved?.[c.dataset.check]);c.addEventListener('change',()=>update(true))});if(checks.length)update();
+  document.getElementById('reset-checklist')?.addEventListener('click',()=>{checks.forEach(c=>c.checked=false);completedThisVisit=false;update()});
+  document.getElementById('download-checklist')?.addEventListener('click',()=>{const text='MODEL NOTES — Памятка перед съёмкой\n\n'+checks.map(c=>(c.checked?'[x] ':'[ ] ')+c.closest('label').querySelector('strong').textContent+' — '+c.closest('label').querySelector('small').textContent).join('\n')+'\n\nСохрани адрес и время съёмки отдельно.\nmodel-notes-reva\n';const blob=new Blob(['\ufeff'+text],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='model-notes-checklist.txt';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);event('checklist_download')});
+  const configured=Boolean(cfg.expectedHost&&location.protocol==='https:'&&location.host===cfg.expectedHost&&(cfg.liveInternetEnabled||cfg.ramblerId||cfg.myTrackerId));
+  const panel=document.getElementById('consent');
+  function script(src,id){if(id&&document.getElementById(id))return;const s=document.createElement('script');if(id)s.id=id;s.async=true;s.src=src;document.head.append(s)}
+  function start(){if(statsStarted||!configured)return;statsStarted=true;
+    if(cfg.liveInternetEnabled){const a=document.createElement('a');a.href='https://www.liveinternet.ru/click';a.target='_blank';a.rel='noopener noreferrer';const img=document.createElement('img');img.width=88;img.height=31;img.style.border='0';img.title='LiveInternet: просмотры и посетители за 24 часа';img.alt='Статистика LiveInternet';img.src='https://counter.yadro.ru/hit?t52.6;r'+escape(document.referrer)+';s'+screen.width+'*'+screen.height+'*'+(screen.colorDepth||screen.pixelDepth)+';u'+escape(document.URL)+';h'+escape(document.title.substring(0,150))+';'+Math.random();a.append(img);document.getElementById('counter-widgets').append(a);}
+    if(cfg.ramblerId){const logo=document.createElement('span');logo.id='rambler-logo';document.getElementById('counter-widgets').append(logo);(window._top100q=window._top100q||[]).push(function(){try{window.top100Counter=new window.top100({project:cfg.ramblerId,attributes_dataset:['model-block'],trackHashes:true,user_id:null});if(typeof window.top100Counter.drawLogoTo==='function')window.top100Counter.drawLogoTo('rambler-logo');}catch(e){}});script('https://st.top100.ru/top100/top100.js','rambler-script');}
+    if(cfg.myTrackerId){window._tmr=window._tmr||[];window._tmr.push({id:cfg.myTrackerId,type:'pageView',start:Date.now()});script('https://top-fwz1.mail.ru/js/code.js','tmr-code');}
+  }
+  if(configured&&storage.get('modelnotes-consent')==='yes')start();else if(configured&&!storage.get('modelnotes-consent'))panel.hidden=false;
+  document.getElementById('allow-stats')?.addEventListener('click',()=>{storage.set('modelnotes-consent','yes');panel.hidden=true;start()});
+  document.getElementById('deny-stats')?.addEventListener('click',()=>{storage.set('modelnotes-consent','no');panel.hidden=true;if(statsStarted)location.reload()});
+  document.getElementById('privacy-settings')?.addEventListener('click',()=>{if(configured){panel.hidden=false}else document.getElementById('privacy-status').textContent='Внешние счётчики пока не подключены. Прогресс чек-листа хранится только в этом браузере.'});
+})();
